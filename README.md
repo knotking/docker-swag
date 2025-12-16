@@ -1,20 +1,38 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# DockerSwag 🐳
 
-# Run and deploy your AI Studio app
+**DockerSwag** is a modern, AI-powered visual editor for Docker Compose. It allows developers to design, configure, and manage Docker services through an intuitive UI while leveraging Google Gemini AI for intelligent generation and analysis.
 
-This contains everything you need to run your app locally.
+![DockerSwag UI](https://placehold.co/1200x600/0e1117/1D63ED?text=DockerSwag+Preview)
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Gz9c30m-ojxor4kcZHsGFdT7lLuCLGRy
+## ✨ Features
 
-## Run Locally
+- **Visual Service Editor**: Easily configure services, ports, volumes, environment variables, and restart policies without wrestling with YAML indentation.
+- **AI Magic Generation**: Describe the service you need (e.g., *"A Postgres database with user 'admin' and password 'secret'"*), and let Gemini AI build the configuration for you.
+- **Intelligent Analysis**: One-click security and performance auditing of your entire stack. Get actionable insights on best practices.
+- **Smart Import & Migration**: Paste any `docker-compose.yml` (v1, v2, or v3). The app automatically attempts to migrate it to modern v3.8 standards and loads it into the visual editor.
+- **Real-time Preview**: Watch the `docker-compose.yml` file generate instantly as you edit the UI.
+- **History Control**: Built-in Undo/Redo functionality to experiment safely.
+- **Export**: Download your production-ready `docker-compose.yml` with a single click.
 
-**Prerequisites:**  Node.js
+## 🚀 Getting Started
 
+1. **Add a Service**: Click "Add Empty" to start from scratch or "Generate with AI" to use a prompt.
+2. **Configure**: Select a service from the sidebar and use the editor panel to tweak images, ports, and environment variables.
+3. **Analyze**: Click the "Analyze" button to run a security and performance check on your stack.
+4. **Export**: Once satisfied, click "Export" to download your file.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 🛠️ Tech Stack
+
+- **Frontend**: React, TypeScript, Tailwind CSS
+- **AI**: Google Gemini API (`gemini-2.5-flash`)
+- **Icons**: Lucide React
+- **Build**: Vite (implied environment)
+
+## 🔑 Environment Setup
+
+This application requires a Google Gemini API Key to function.
+
+Ensure `process.env.API_KEY` is available in your build environment.
+
+---
+*Built with ❤️ for the container community.*
