@@ -1,0 +1,5 @@
+{
+  "name": "DockerSwag",
+  "description": "A visual, AI-powered Docker Compose designer. Create, configure, and manage services with an intuitive UI and export ready-to-use YAML files.",
+  "requestFramePermissions": []
+}
