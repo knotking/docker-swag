@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ServiceList } from './components/ServiceList';
 import { ServiceEditor } from './components/ServiceEditor';
 import { MagicModal } from './components/MagicModal';
@@ -8,7 +8,7 @@ import { RepoModal } from './components/RepoModal';
 import { generateYaml } from './utils/yamlGenerator';
 import { DockerService, AnalysisResult } from './types';
 import { generateServiceFromPrompt, analyzeComposeConfig, parseAndMigrateYaml, generateStackFromRepo } from './services/geminiService';
-import { Download, Code, Eye, AlertCircle, ShieldCheck, Undo2, Redo2, Import, Github } from 'lucide-react';
+import { Download, Code, Eye, AlertCircle, ShieldCheck, Undo2, Redo2, Import, Github, ArchiveRestore, Save } from 'lucide-react';
 
 const INITIAL_SERVICE: DockerService = {
   id: '1',
@@ -21,6 +21,9 @@ const INITIAL_SERVICE: DockerService = {
   dependsOn: [],
   restart: 'always'
 };
+
+const AUTOSAVE_KEY = 'dockerSwag_autosave_v1';
+const AUTOSAVE_INTERVAL = 60000; // 60 seconds
 
 export default function App() {
   // History State
@@ -48,9 +51,50 @@ export default function App() {
   const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
   const [isRepoGenerating, setIsRepoGenerating] = useState(false);
 
+  // Auto-save State
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [draftAvailable, setDraftAvailable] = useState(false);
+
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Refs for auto-save to avoid stale closures in interval
+  const servicesRef = useRef(services);
+  servicesRef.current = services;
+
   const activeService = services.find(s => s.id === activeServiceId);
+
+  // Check for existing draft on mount
+  useEffect(() => {
+    const savedData = localStorage.getItem(AUTOSAVE_KEY);
+    if (savedData) {
+      setDraftAvailable(true);
+      try {
+        const parsed = JSON.parse(savedData);
+        if (parsed.timestamp) {
+           setLastSaved(new Date(parsed.timestamp));
+        }
+      } catch (e) {
+        // invalid json, ignore
+      }
+    }
+  }, []);
+
+  // Auto-save Interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentServices = servicesRef.current;
+      const payload = {
+        timestamp: Date.now(),
+        services: currentServices
+      };
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(payload));
+      setLastSaved(new Date());
+      setDraftAvailable(true);
+      // Optional: console.log('Auto-saved to localStorage');
+    }, AUTOSAVE_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-hide error after 5s
   useEffect(() => {
@@ -176,10 +220,6 @@ export default function App() {
         }
       });
 
-      // We replace the current services or append? For a full stack gen, usually nice to view it cleanly.
-      // But let's append to keep safety, but since it's a full stack, let's Replace if initial or Append if user has work.
-      // Actually, safest is to append but ensure unique names.
-      
       const finalServices = [...services];
       
       generatedServices.forEach(newService => {
@@ -242,6 +282,24 @@ export default function App() {
     }
   };
 
+  const handleRestoreDraft = () => {
+    try {
+      const savedData = localStorage.getItem(AUTOSAVE_KEY);
+      if (!savedData) return;
+      
+      const parsed = JSON.parse(savedData);
+      if (parsed.services && Array.isArray(parsed.services)) {
+        updateServicesWithHistory(parsed.services);
+        if (parsed.services.length > 0) {
+          setActiveServiceId(parsed.services[0].id);
+        }
+        setErrorMsg(null); 
+      }
+    } catch (e) {
+      setErrorMsg("Failed to restore draft. Data may be corrupted.");
+    }
+  };
+
   const downloadYaml = () => {
     const yaml = generateYaml(services);
     const blob = new Blob([yaml], { type: 'text/yaml' });
@@ -278,6 +336,12 @@ export default function App() {
               D
             </div>
             <h1 className="font-bold text-lg tracking-tight text-white">DockerSwag</h1>
+            {lastSaved && (
+               <span className="hidden lg:flex items-center gap-1.5 ml-4 text-[10px] text-gray-500 bg-gray-800/50 px-2 py-1 rounded border border-gray-700/50">
+                  <Save size={10} />
+                  Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+               </span>
+            )}
           </div>
           
           <div className="flex items-center gap-3">
@@ -310,9 +374,20 @@ export default function App() {
             </button>
             <div className="h-6 w-px bg-gray-700 mx-1"></div>
             
+            {draftAvailable && (
+              <button
+                onClick={handleRestoreDraft}
+                className="flex items-center gap-2 bg-amber-600/10 hover:bg-amber-600/20 text-amber-500 border border-amber-600/30 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                title="Restore from last auto-saved draft"
+              >
+                <ArchiveRestore size={16} />
+                Restore
+              </button>
+            )}
+
             <button
               onClick={() => setIsRepoModalOpen(true)}
-              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-1.5 rounded-md text-sm font-medium transition-colors border border-gray-600"
+              className="hidden md:flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border border-gray-600"
             >
               <Github size={16} />
               Repo
@@ -320,7 +395,7 @@ export default function App() {
 
             <button
               onClick={() => setIsMigrateModalOpen(true)}
-              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-1.5 rounded-md text-sm font-medium transition-colors border border-gray-600"
+              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border border-gray-600"
             >
               <Import size={16} />
               Import
@@ -328,7 +403,7 @@ export default function App() {
 
             <button
               onClick={handleAnalyze}
-              className="flex items-center gap-2 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 border border-indigo-500/30 px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
+              className="hidden sm:flex items-center gap-2 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 border border-indigo-500/30 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
             >
               <ShieldCheck size={16} />
               Analyze
@@ -336,7 +411,7 @@ export default function App() {
 
             <button
               onClick={downloadYaml}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
             >
               <Download size={16} />
               Export
