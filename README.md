@@ -2,9 +2,11 @@
 
 **DockerSwag** is a modern, AI-powered visual editor for Docker Compose. It allows developers to design, configure, and manage Docker services through an intuitive UI while leveraging Google Gemini AI for intelligent generation and analysis.
 
-![DockerSwag UI](https://placehold.co/1200x600/0e1117/1D63ED?text=DockerSwag+Preview)
-
 <img width="2752" height="1536" alt="dockerswag" src="https://github.com/user-attachments/assets/e845f5b0-46b1-4d87-b850-a0113a7b72b6" />
+
+
+https://github.com/user-attachments/assets/d092c407-7209-4c64-8df8-905946c401d6
+
 
 
 ## ✨ Features
