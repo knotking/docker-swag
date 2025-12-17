@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { DockerService, AnalysisResult } from "../types";
+import { DockerService, AnalysisResult, BuildConfig } from "../types";
 
 // Simple ID generator to avoid external dep for this specific file if UUID isn't available
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -33,7 +34,17 @@ const mapResponseToServices = (servicesList: any[]): DockerService[] => {
     })),
     networks: s.networks || [],
     dependsOn: s.dependsOn || [],
-    mem_limit: s.mem_limit
+    mem_limit: s.mem_limit,
+    build: s.build ? {
+        context: s.build.context,
+        dockerfile: s.build.dockerfile,
+        target: s.build.target,
+        args: (s.build.args || []).map((a: any) => ({
+            id: generateId(),
+            key: a.key,
+            value: String(a.value)
+        }))
+    } : undefined
   }));
 };
 
@@ -89,7 +100,25 @@ const fullStackSchema = {
             type: Type.ARRAY,
             items: { type: Type.STRING }
           },
-          mem_limit: { type: Type.STRING }
+          mem_limit: { type: Type.STRING },
+          build: {
+              type: Type.OBJECT,
+              properties: {
+                  context: { type: Type.STRING },
+                  dockerfile: { type: Type.STRING },
+                  target: { type: Type.STRING },
+                  args: {
+                      type: Type.ARRAY,
+                      items: {
+                          type: Type.OBJECT,
+                          properties: {
+                              key: { type: Type.STRING },
+                              value: { type: Type.STRING }
+                          }
+                      }
+                  }
+              }
+          }
         },
         required: ["name", "image"]
       }
@@ -286,3 +315,53 @@ export const parseAndMigrateYaml = async (yamlInput: string): Promise<DockerServ
     throw error;
   }
 };
+
+export const generateBuildConfig = async (prompt: string): Promise<BuildConfig> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Generate a Docker Compose 'build' configuration based on this description: "${prompt}".
+            Determine the likely context path, dockerfile name, target stage, and build arguments.`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        context: { type: Type.STRING, description: "Path to build context, e.g. . or ./app" },
+                        dockerfile: { type: Type.STRING, description: "Dockerfile name, e.g. Dockerfile" },
+                        target: { type: Type.STRING, description: "Multistage build target" },
+                        args: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    key: { type: Type.STRING },
+                                    value: { type: Type.STRING }
+                                }
+                            }
+                        }
+                    },
+                    required: ["context"]
+                }
+            }
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No response from AI");
+        const data = JSON.parse(text);
+
+        return {
+            context: data.context || '.',
+            dockerfile: data.dockerfile,
+            target: data.target,
+            args: (data.args || []).map((a: any) => ({
+                id: generateId(),
+                key: a.key,
+                value: String(a.value)
+            }))
+        };
+    } catch (error) {
+        console.error("Build Config Gen failed", error);
+        throw error;
+    }
+}

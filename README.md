@@ -7,6 +7,7 @@
 ## ✨ Features
 
 - **Visual Service Editor**: Easily configure services, ports, volumes, environment variables, restart policies, and **service dependencies** without wrestling with YAML indentation.
+- **Advanced Build Configuration**: Support for `build` contexts alongside pre-built images. Choose between **Manual** setup (Dockerfile, target, args), **Repo** mode (clone as context), or **AI Assist** to generate complex build configurations from natural language.
 - **AI Magic Generation**: Describe the service you need (e.g., *"A Postgres database with user 'admin' and password 'secret'"*), and let Gemini AI build the configuration for you.
 - **Repo to Compose**: Paste a GitHub repository URL, and the AI will infer the technology stack (e.g., Node.js + MongoDB) and generate a complete Docker Compose configuration for it.
 - **Intelligent Analysis**: One-click security and performance auditing of your entire stack. Get actionable insights on best practices.
@@ -22,8 +23,9 @@
    - Click **"Generate with AI"** to create a specific service via prompt.
    - Click **"Repo"** to generate a full stack from a GitHub URL.
 2. **Configure**: Select a service from the sidebar and use the editor panel to tweak images, ports, environment variables, and map out dependencies (`depends_on`).
-3. **Analyze**: Click the "Analyze" button to run a security and performance check on your stack.
-4. **Export**: Once satisfied, click "Export" to download your file.
+3. **Build Settings**: Toggle between "Pre-built Image" and "Build from Source" in the editor. Use the **AI Assist** tab to let Gemini figure out your build context and arguments.
+4. **Analyze**: Click the "Analyze" button to run a security and performance check on your stack.
+5. **Export**: Once satisfied, click "Export" to download your file.
 
 ## 🛠️ Tech Stack
 

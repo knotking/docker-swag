@@ -16,7 +16,7 @@ const INITIAL_SERVICE: DockerService = {
   image: 'nginx:latest',
   ports: [{ id: 'p1', host: '80', container: '80', protocol: 'tcp' }],
   environment: [],
-  volumes: [],
+  volumes: [{ id: 'v1', source: './data', target: '/data' }],
   networks: ['default'],
   dependsOn: [],
   restart: 'always'

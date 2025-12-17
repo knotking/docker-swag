@@ -1,3 +1,4 @@
+
 import { DockerService } from '../types';
 
 export const generateYaml = (services: DockerService[]): string => {
@@ -9,7 +10,31 @@ export const generateYaml = (services: DockerService[]): string => {
 
   services.forEach(service => {
     yaml += `  ${service.name || 'unnamed-service'}:\n`;
-    yaml += `    image: ${service.image || 'ubuntu:latest'}\n`;
+    
+    // Build Block
+    if (service.build && service.build.context) {
+      yaml += `    build:\n`;
+      yaml += `      context: ${service.build.context}\n`;
+      if (service.build.dockerfile) {
+        yaml += `      dockerfile: ${service.build.dockerfile}\n`;
+      }
+      if (service.build.target) {
+        yaml += `      target: ${service.build.target}\n`;
+      }
+      if (service.build.args && service.build.args.length > 0) {
+        yaml += `      args:\n`;
+        service.build.args.forEach(a => {
+           if (a.key) yaml += `        - ${a.key}=${a.value}\n`;
+        });
+      }
+      // If build is present, image field acts as the tag for the built image
+      if (service.image) {
+        yaml += `    image: ${service.image}\n`;
+      }
+    } else {
+       // Standard Image Block
+       yaml += `    image: ${service.image || 'ubuntu:latest'}\n`;
+    }
     
     if (service.command) {
       yaml += `    command: ${service.command}\n`;

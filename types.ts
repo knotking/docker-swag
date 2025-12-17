@@ -1,3 +1,4 @@
+
 export interface EnvVar {
   id: string;
   key: string;
@@ -18,10 +19,18 @@ export interface Volume {
   type?: 'bind' | 'volume';
 }
 
+export interface BuildConfig {
+  context: string;
+  dockerfile?: string;
+  target?: string;
+  args: EnvVar[];
+}
+
 export interface DockerService {
   id: string;
   name: string;
   image: string;
+  build?: BuildConfig;
   command?: string;
   restart?: 'no' | 'always' | 'on-failure' | 'unless-stopped';
   ports: PortMapping[];

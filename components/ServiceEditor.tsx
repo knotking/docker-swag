@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { DockerService, EnvVar, PortMapping, Volume } from '../types';
-import { Trash2, Plus, Info, Link } from 'lucide-react';
+import { DockerService, EnvVar, PortMapping, Volume, BuildConfig } from '../types';
+import { Trash2, Plus, Info, Link, Layers, GitBranch, Sparkles, Folder, Settings, Loader2 } from 'lucide-react';
+import { generateBuildConfig } from '../services/geminiService';
 
 interface ServiceEditorProps {
   service: DockerService;
@@ -24,8 +25,24 @@ const SectionHeader = ({ title, icon }: { title: string, icon?: React.ReactNode 
 );
 
 export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange, allServiceNames }) => {
+  const [buildMode, setBuildMode] = useState<'image' | 'build'>(service.build ? 'build' : 'image');
+  const [activeBuildTab, setActiveBuildTab] = useState<'manual' | 'repo' | 'prompt'>('manual');
+  const [promptText, setPromptText] = useState('');
+  const [isGeneratingBuild, setIsGeneratingBuild] = useState(false);
+
   const handleChange = (field: keyof DockerService, value: any) => {
     onChange({ ...service, [field]: value });
+  };
+
+  const handleBuildChange = (field: keyof BuildConfig, value: any) => {
+    const currentBuild = service.build || { context: '.', args: [] };
+    handleChange('build', { ...currentBuild, [field]: value });
+  };
+
+  const clearBuild = () => {
+    // When switching to image mode, we clear build config to avoid confusion in export
+    const { build, ...rest } = service;
+    onChange(rest as DockerService);
   };
 
   // --- Helpers for Arrays (Ports, Envs, Vols) ---
@@ -61,6 +78,36 @@ export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange,
   const updateVol = (id: string, field: keyof Volume, value: string) => {
     handleChange('volumes', service.volumes.map(v => v.id === id ? { ...v, [field]: value } : v));
   };
+  
+  // Helpers for Build Args
+  const addBuildArg = () => {
+      const currentArgs = service.build?.args || [];
+      const newArg: EnvVar = { id: Math.random().toString(), key: 'ARG_NAME', value: 'value' };
+      handleBuildChange('args', [...currentArgs, newArg]);
+  };
+  const removeBuildArg = (id: string) => {
+      const currentArgs = service.build?.args || [];
+      handleBuildChange('args', currentArgs.filter(a => a.id !== id));
+  };
+  const updateBuildArg = (id: string, field: keyof EnvVar, value: string) => {
+      const currentArgs = service.build?.args || [];
+      handleBuildChange('args', currentArgs.map(a => a.id === id ? { ...a, [field]: value } : a));
+  };
+
+  const handleAIGenerateBuild = async () => {
+    if (!promptText.trim()) return;
+    setIsGeneratingBuild(true);
+    try {
+        const config = await generateBuildConfig(promptText);
+        handleChange('build', config);
+        setActiveBuildTab('manual'); // Switch to manual to show results
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setIsGeneratingBuild(false);
+    }
+  };
+
 
   // Filter out the current service from potential dependencies
   const otherServices = allServiceNames.filter(name => name !== service.name);
@@ -83,7 +130,7 @@ export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange,
         </div>
 
         {/* General Settings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <InputGroup label="Service Name">
             <input
               type="text"
@@ -91,15 +138,6 @@ export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange,
               onChange={(e) => handleChange('name', e.target.value)}
               className="w-full bg-docker-panel border border-docker-border rounded p-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors"
               placeholder="e.g. web-app"
-            />
-          </InputGroup>
-          <InputGroup label="Image">
-            <input
-              type="text"
-              value={service.image}
-              onChange={(e) => handleChange('image', e.target.value)}
-              className="w-full bg-docker-panel border border-docker-border rounded p-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors"
-              placeholder="e.g. node:18-alpine"
             />
           </InputGroup>
           <InputGroup label="Restart Policy">
@@ -114,15 +152,168 @@ export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange,
               <option value="unless-stopped">unless-stopped</option>
             </select>
           </InputGroup>
-          <InputGroup label="Memory Limit (Optional)">
-             <input
-              type="text"
-              value={service.mem_limit || ''}
-              onChange={(e) => handleChange('mem_limit', e.target.value)}
-              className="w-full bg-docker-panel border border-docker-border rounded p-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors"
-              placeholder="e.g. 512m"
-            />
-          </InputGroup>
+        </div>
+
+        {/* Image / Build Section */}
+        <div className="bg-docker-panel border border-docker-border rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-4 mb-4 border-b border-gray-700 pb-2">
+                <button
+                    onClick={() => { setBuildMode('image'); clearBuild(); }}
+                    className={`flex items-center gap-2 pb-2 text-sm font-medium border-b-2 transition-colors ${buildMode === 'image' ? 'text-blue-400 border-blue-400' : 'text-gray-400 border-transparent hover:text-gray-200'}`}
+                >
+                    <Layers size={16} />
+                    Pre-built Image
+                </button>
+                <button
+                    onClick={() => { setBuildMode('build'); if(!service.build) handleChange('build', {context: '.', args: []}); }}
+                    className={`flex items-center gap-2 pb-2 text-sm font-medium border-b-2 transition-colors ${buildMode === 'build' ? 'text-blue-400 border-blue-400' : 'text-gray-400 border-transparent hover:text-gray-200'}`}
+                >
+                    <Settings size={16} />
+                    Build from Source
+                </button>
+            </div>
+
+            {buildMode === 'image' ? (
+                 <InputGroup label="Image">
+                    <input
+                    type="text"
+                    value={service.image}
+                    onChange={(e) => handleChange('image', e.target.value)}
+                    className="w-full bg-black/20 border border-docker-border rounded p-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors"
+                    placeholder="e.g. nginx:latest or my-registry.com/image:tag"
+                    />
+                </InputGroup>
+            ) : (
+                <div className="space-y-4">
+                    <InputGroup label="Built Image Tag (Optional)" helper="Name for the resulting image">
+                         <input
+                            type="text"
+                            value={service.image || ''}
+                            onChange={(e) => handleChange('image', e.target.value)}
+                            className="w-full bg-black/20 border border-docker-border rounded p-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors"
+                            placeholder="e.g. my-app:latest"
+                        />
+                    </InputGroup>
+
+                    <div className="flex gap-2 mb-3 bg-black/20 p-1 rounded-md">
+                        <button onClick={() => setActiveBuildTab('manual')} className={`flex-1 py-1.5 text-xs font-medium rounded ${activeBuildTab === 'manual' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                            Manual
+                        </button>
+                        <button onClick={() => setActiveBuildTab('repo')} className={`flex-1 py-1.5 text-xs font-medium rounded flex items-center justify-center gap-1 ${activeBuildTab === 'repo' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                            <GitBranch size={12}/> Repo
+                        </button>
+                        <button onClick={() => setActiveBuildTab('prompt')} className={`flex-1 py-1.5 text-xs font-medium rounded flex items-center justify-center gap-1 ${activeBuildTab === 'prompt' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                            <Sparkles size={12}/> AI Assist
+                        </button>
+                    </div>
+
+                    {activeBuildTab === 'manual' && (
+                        <div className="space-y-3 animate-in fade-in slide-in-from-top-1">
+                             <div className="grid grid-cols-2 gap-4">
+                                <InputGroup label="Context">
+                                    <div className="relative">
+                                        <Folder size={14} className="absolute left-3 top-2.5 text-gray-500" />
+                                        <input
+                                            type="text"
+                                            value={service.build?.context || '.'}
+                                            onChange={(e) => handleBuildChange('context', e.target.value)}
+                                            className="w-full bg-black/20 border border-docker-border rounded p-2 pl-9 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                            placeholder="."
+                                        />
+                                    </div>
+                                </InputGroup>
+                                <InputGroup label="Dockerfile">
+                                    <input
+                                        type="text"
+                                        value={service.build?.dockerfile || ''}
+                                        onChange={(e) => handleBuildChange('dockerfile', e.target.value)}
+                                        className="w-full bg-black/20 border border-docker-border rounded p-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                        placeholder="Dockerfile"
+                                    />
+                                </InputGroup>
+                             </div>
+                             <InputGroup label="Target Stage">
+                                <input
+                                    type="text"
+                                    value={service.build?.target || ''}
+                                    onChange={(e) => handleBuildChange('target', e.target.value)}
+                                    className="w-full bg-black/20 border border-docker-border rounded p-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                    placeholder="e.g. production"
+                                />
+                             </InputGroup>
+                             
+                             <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Build Args</label>
+                                <div className="space-y-2">
+                                    {service.build?.args?.map((arg) => (
+                                        <div key={arg.id} className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={arg.key}
+                                                onChange={(e) => updateBuildArg(arg.id, 'key', e.target.value)}
+                                                className="flex-1 bg-black/20 border border-docker-border rounded p-1.5 text-sm text-white font-mono"
+                                                placeholder="ARG"
+                                            />
+                                            <span className="text-gray-500">=</span>
+                                            <input
+                                                type="text"
+                                                value={arg.value}
+                                                onChange={(e) => updateBuildArg(arg.id, 'value', e.target.value)}
+                                                className="flex-1 bg-black/20 border border-docker-border rounded p-1.5 text-sm text-white font-mono"
+                                                placeholder="VAL"
+                                            />
+                                            <button onClick={() => removeBuildArg(arg.id)} className="p-1.5 text-gray-500 hover:text-red-400">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button onClick={addBuildArg} className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 font-medium">
+                                        <Plus size={14} /> Add Arg
+                                    </button>
+                                </div>
+                             </div>
+                        </div>
+                    )}
+
+                    {activeBuildTab === 'repo' && (
+                        <div className="animate-in fade-in slide-in-from-top-1">
+                             <InputGroup label="Git Repository URL">
+                                <input
+                                    type="text"
+                                    value={service.build?.context || ''}
+                                    onChange={(e) => handleBuildChange('context', e.target.value)}
+                                    className="w-full bg-black/20 border border-docker-border rounded p-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                    placeholder="https://github.com/username/repo.git"
+                                />
+                                <p className="text-xs text-gray-500 mt-2">
+                                    Docker Compose will clone this repository and use it as the build context.
+                                </p>
+                             </InputGroup>
+                        </div>
+                    )}
+
+                    {activeBuildTab === 'prompt' && (
+                        <div className="animate-in fade-in slide-in-from-top-1">
+                            <InputGroup label="Describe your project">
+                                <textarea
+                                    value={promptText}
+                                    onChange={(e) => setPromptText(e.target.value)}
+                                    className="w-full h-24 bg-black/20 border border-docker-border rounded p-2 text-sm text-white focus:border-indigo-500 focus:outline-none resize-none"
+                                    placeholder="e.g. It's a Python Flask app in the 'backend' folder, and I need to build the 'prod' stage."
+                                />
+                            </InputGroup>
+                            <button 
+                                onClick={handleAIGenerateBuild}
+                                disabled={isGeneratingBuild || !promptText.trim()}
+                                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                            >
+                                {isGeneratingBuild ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                                Generate Configuration
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
         
         <InputGroup label="Command (Optional)">
@@ -205,7 +396,7 @@ export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange,
                 value={vol.source}
                 onChange={(e) => updateVol(vol.id, 'source', e.target.value)}
                 className="flex-1 bg-docker-panel border border-docker-border rounded p-2 text-sm text-white font-mono focus:border-blue-500 focus:outline-none"
-                placeholder="./host/path"
+                placeholder="./data"
               />
               <span className="text-gray-500">:</span>
               <input
@@ -213,7 +404,7 @@ export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange,
                 value={vol.target}
                 onChange={(e) => updateVol(vol.id, 'target', e.target.value)}
                 className="flex-1 bg-docker-panel border border-docker-border rounded p-2 text-sm text-white font-mono focus:border-blue-500 focus:outline-none"
-                placeholder="/container/path"
+                placeholder="/data"
               />
               <button onClick={() => removeVol(vol.id)} className="p-2 text-gray-500 hover:text-red-400">
                 <Trash2 size={16} />
