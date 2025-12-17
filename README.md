@@ -6,8 +6,9 @@
 
 ## ✨ Features
 
-- **Visual Service Editor**: Easily configure services, ports, volumes, environment variables, and restart policies without wrestling with YAML indentation.
+- **Visual Service Editor**: Easily configure services, ports, volumes, environment variables, restart policies, and **service dependencies** without wrestling with YAML indentation.
 - **AI Magic Generation**: Describe the service you need (e.g., *"A Postgres database with user 'admin' and password 'secret'"*), and let Gemini AI build the configuration for you.
+- **Repo to Compose**: Paste a GitHub repository URL, and the AI will infer the technology stack (e.g., Node.js + MongoDB) and generate a complete Docker Compose configuration for it.
 - **Intelligent Analysis**: One-click security and performance auditing of your entire stack. Get actionable insights on best practices.
 - **Smart Import & Migration**: Paste any `docker-compose.yml` (v1, v2, or v3). The app automatically attempts to migrate it to modern v3.8 standards and loads it into the visual editor.
 - **Real-time Preview**: Watch the `docker-compose.yml` file generate instantly as you edit the UI.
@@ -16,8 +17,11 @@
 
 ## 🚀 Getting Started
 
-1. **Add a Service**: Click "Add Empty" to start from scratch or "Generate with AI" to use a prompt.
-2. **Configure**: Select a service from the sidebar and use the editor panel to tweak images, ports, and environment variables.
+1. **Create a Stack**:
+   - Click **"Add Empty"** to start from scratch.
+   - Click **"Generate with AI"** to create a specific service via prompt.
+   - Click **"Repo"** to generate a full stack from a GitHub URL.
+2. **Configure**: Select a service from the sidebar and use the editor panel to tweak images, ports, environment variables, and map out dependencies (`depends_on`).
 3. **Analyze**: Click the "Analyze" button to run a security and performance check on your stack.
 4. **Export**: Once satisfied, click "Export" to download your file.
 

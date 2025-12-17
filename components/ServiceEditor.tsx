@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DockerService, EnvVar, PortMapping, Volume } from '../types';
-import { Trash2, Plus, Info } from 'lucide-react';
+import { Trash2, Plus, Info, Link } from 'lucide-react';
 
 interface ServiceEditorProps {
   service: DockerService;
@@ -16,9 +16,10 @@ const InputGroup = ({ label, children, helper }: { label: string; children?: Rea
   </div>
 );
 
-const SectionHeader = ({ title }: { title: string }) => (
-  <div className="flex items-center gap-2 mb-4 mt-8 pb-2 border-b border-gray-800">
-    <h3 className="text-sm font-semibold text-blue-400">{title}</h3>
+const SectionHeader = ({ title, icon }: { title: string, icon?: React.ReactNode }) => (
+  <div className="flex items-center gap-2 mb-4 mt-8 pb-2 border-b border-gray-800 text-blue-400">
+    {icon}
+    <h3 className="text-sm font-semibold">{title}</h3>
   </div>
 );
 
@@ -59,6 +60,18 @@ export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange,
   };
   const updateVol = (id: string, field: keyof Volume, value: string) => {
     handleChange('volumes', service.volumes.map(v => v.id === id ? { ...v, [field]: value } : v));
+  };
+
+  // Filter out the current service from potential dependencies
+  const otherServices = allServiceNames.filter(name => name !== service.name);
+
+  const toggleDependency = (targetName: string) => {
+    const currentDepends = service.dependsOn || [];
+    if (currentDepends.includes(targetName)) {
+      handleChange('dependsOn', currentDepends.filter(d => d !== targetName));
+    } else {
+      handleChange('dependsOn', [...currentDepends, targetName]);
+    }
   };
 
   return (
@@ -211,6 +224,34 @@ export const ServiceEditor: React.FC<ServiceEditorProps> = ({ service, onChange,
             <Plus size={14} /> Add Volume
           </button>
         </div>
+
+        {/* Depends On */}
+        <SectionHeader title="Depends On" icon={<Link size={16} />} />
+        {otherServices.length === 0 ? (
+          <p className="text-xs text-gray-500 italic mb-4">
+            No other services available. Add more services to configure dependencies.
+          </p>
+        ) : (
+          <div className="space-y-2 mb-4 bg-docker-panel border border-docker-border rounded-lg p-3">
+             {otherServices.map(other => {
+               const isChecked = (service.dependsOn || []).includes(other);
+               return (
+                <label key={other} className="flex items-center gap-3 cursor-pointer p-2 hover:bg-white/5 rounded transition-colors group">
+                   <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-blue-600 border-blue-600' : 'bg-transparent border-gray-600 group-hover:border-gray-500'}`}>
+                      {isChecked && <Plus size={10} className="text-white transform rotate-45" />}
+                   </div>
+                   <input
+                     type="checkbox"
+                     checked={isChecked}
+                     onChange={() => toggleDependency(other)}
+                     className="hidden"
+                   />
+                   <span className={`text-sm ${isChecked ? 'text-white' : 'text-gray-400'}`}>{other}</span>
+                </label>
+               );
+             })}
+          </div>
+        )}
       </div>
     </div>
   );

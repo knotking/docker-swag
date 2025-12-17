@@ -4,10 +4,11 @@ import { ServiceEditor } from './components/ServiceEditor';
 import { MagicModal } from './components/MagicModal';
 import { AnalysisModal } from './components/AnalysisModal';
 import { MigrateModal } from './components/MigrateModal';
+import { RepoModal } from './components/RepoModal';
 import { generateYaml } from './utils/yamlGenerator';
 import { DockerService, AnalysisResult } from './types';
-import { generateServiceFromPrompt, analyzeComposeConfig, parseAndMigrateYaml } from './services/geminiService';
-import { Download, Code, Eye, AlertCircle, ShieldCheck, Undo2, Redo2, Import } from 'lucide-react';
+import { generateServiceFromPrompt, analyzeComposeConfig, parseAndMigrateYaml, generateStackFromRepo } from './services/geminiService';
+import { Download, Code, Eye, AlertCircle, ShieldCheck, Undo2, Redo2, Import, Github } from 'lucide-react';
 
 const INITIAL_SERVICE: DockerService = {
   id: '1',
@@ -16,7 +17,7 @@ const INITIAL_SERVICE: DockerService = {
   ports: [{ id: 'p1', host: '80', container: '80', protocol: 'tcp' }],
   environment: [],
   volumes: [],
-  networks: [],
+  networks: ['default'],
   dependsOn: [],
   restart: 'always'
 };
@@ -42,6 +43,10 @@ export default function App() {
   // Migrate State
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
+
+  // Repo State
+  const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
+  const [isRepoGenerating, setIsRepoGenerating] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -111,7 +116,7 @@ export default function App() {
       ports: [],
       environment: [],
       volumes: [],
-      networks: [],
+      networks: ['default'],
       dependsOn: []
     };
     const newServices = [...services, newService];
@@ -132,6 +137,12 @@ export default function App() {
     setErrorMsg(null);
     try {
       const newService = await generateServiceFromPrompt(prompt);
+      
+      // Auto-assign default network if not specified
+      if (!newService.networks || newService.networks.length === 0) {
+        newService.networks = ['default'];
+      }
+
       // Ensure name uniqueness
       let uniqueName = newService.name;
       let counter = 1;
@@ -149,6 +160,49 @@ export default function App() {
       setErrorMsg("Failed to generate service. Please try again or check your API key.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleRepoGenerate = async (repoUrl: string, hint: string) => {
+    setIsRepoGenerating(true);
+    setErrorMsg(null);
+    try {
+      const generatedServices = await generateStackFromRepo(repoUrl, hint);
+      
+      // Auto-assign default network if not specified for all
+      generatedServices.forEach(s => {
+        if (!s.networks || s.networks.length === 0) {
+          s.networks = ['default'];
+        }
+      });
+
+      // We replace the current services or append? For a full stack gen, usually nice to view it cleanly.
+      // But let's append to keep safety, but since it's a full stack, let's Replace if initial or Append if user has work.
+      // Actually, safest is to append but ensure unique names.
+      
+      const finalServices = [...services];
+      
+      generatedServices.forEach(newService => {
+         let uniqueName = newService.name;
+         let counter = 1;
+         while (finalServices.some(s => s.name === uniqueName)) {
+           uniqueName = `${newService.name}-${counter}`;
+           counter++;
+         }
+         newService.name = uniqueName;
+         finalServices.push(newService);
+      });
+
+      updateServicesWithHistory(finalServices);
+      // Select the first new service
+      if (generatedServices.length > 0) {
+        setActiveServiceId(generatedServices[0].id);
+      }
+      setIsRepoModalOpen(false);
+    } catch (error) {
+      setErrorMsg("Failed to generate stack from repo. Please try again.");
+    } finally {
+      setIsRepoGenerating(false);
     }
   };
 
@@ -257,6 +311,14 @@ export default function App() {
             <div className="h-6 w-px bg-gray-700 mx-1"></div>
             
             <button
+              onClick={() => setIsRepoModalOpen(true)}
+              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-1.5 rounded-md text-sm font-medium transition-colors border border-gray-600"
+            >
+              <Github size={16} />
+              Repo
+            </button>
+
+            <button
               onClick={() => setIsMigrateModalOpen(true)}
               className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-1.5 rounded-md text-sm font-medium transition-colors border border-gray-600"
             >
@@ -324,6 +386,13 @@ export default function App() {
         onClose={() => setIsMagicModalOpen(false)}
         onGenerate={handleMagicGenerate}
         isGenerating={isGenerating}
+      />
+
+      <RepoModal
+        isOpen={isRepoModalOpen}
+        onClose={() => setIsRepoModalOpen(false)}
+        onGenerate={handleRepoGenerate}
+        isGenerating={isRepoGenerating}
       />
 
       <AnalysisModal 

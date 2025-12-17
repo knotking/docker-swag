@@ -1,12 +1,101 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { DockerService, AnalysisResult } from "../types";
-import { v4 as uuidv4 } from 'uuid'; // We will use a simple random ID generator instead since uuid isn't standard in browser without polyfills, implemented locally below.
 
 // Simple ID generator to avoid external dep for this specific file if UUID isn't available
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
+
+// Helper to map AI response to DockerService[]
+const mapResponseToServices = (servicesList: any[]): DockerService[] => {
+  return servicesList.map((s: any) => ({
+    id: generateId(),
+    name: s.name,
+    image: s.image,
+    command: s.command,
+    restart: s.restart,
+    ports: (s.ports || []).map((p: any) => ({
+      id: generateId(),
+      host: String(p.host),
+      container: String(p.container),
+      protocol: p.protocol || 'tcp'
+    })),
+    environment: (s.environment || []).map((e: any) => ({
+      id: generateId(),
+      key: e.key,
+      value: String(e.value)
+    })),
+    volumes: (s.volumes || []).map((v: any) => ({
+      id: generateId(),
+      source: v.source,
+      target: v.target
+    })),
+    networks: s.networks || [],
+    dependsOn: s.dependsOn || [],
+    mem_limit: s.mem_limit
+  }));
+};
+
+// Reusable schema for full stack generation
+const fullStackSchema = {
+  type: Type.OBJECT,
+  properties: {
+    services: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING, description: "Service key name" },
+          image: { type: Type.STRING },
+          command: { type: Type.STRING },
+          restart: { type: Type.STRING },
+          ports: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                host: { type: Type.STRING },
+                container: { type: Type.STRING },
+                protocol: { type: Type.STRING }
+              }
+            }
+          },
+          environment: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                key: { type: Type.STRING },
+                value: { type: Type.STRING }
+              }
+            }
+          },
+          volumes: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                source: { type: Type.STRING },
+                target: { type: Type.STRING }
+              }
+            }
+          },
+          networks: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          },
+          dependsOn: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          },
+          mem_limit: { type: Type.STRING }
+        },
+        required: ["name", "image"]
+      }
+    }
+  }
+};
 
 export const generateServiceFromPrompt = async (prompt: string): Promise<DockerService> => {
   try {
@@ -90,19 +179,6 @@ export const generateServiceFromPrompt = async (prompt: string): Promise<DockerS
   }
 };
 
-export const explainService = async (serviceYaml: string): Promise<string> => {
-   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `Explain what this Docker Compose service does in 2 concise sentences:\n\n${serviceYaml}`,
-    });
-    return response.text || "Could not generate explanation.";
-  } catch (error) {
-    console.error(error);
-    return "AI service unavailable.";
-  }
-}
-
 export const analyzeComposeConfig = async (yaml: string): Promise<AnalysisResult> => {
   try {
     const response = await ai.models.generateContent({
@@ -148,6 +224,39 @@ export const analyzeComposeConfig = async (yaml: string): Promise<AnalysisResult
   }
 };
 
+export const generateStackFromRepo = async (repoUrl: string, hint: string): Promise<DockerService[]> => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `
+        You are a DevOps expert.
+        Generate a complete Docker Compose configuration for a software project located at: ${repoUrl}.
+        
+        Additional Context/Tech Stack: ${hint || "Infer from the repository name or common standards."}
+        
+        1. Assume standard defaults for this technology stack (e.g. Node.js usually needs a database like Mongo or Postgres).
+        2. Create multiple services if typical for this stack (e.g. backend + database).
+        3. Use appropriate official images.
+        4. Configure reasonable ports and environment variables.
+        5. Return the result as a JSON object matching the defined schema.
+      `,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: fullStackSchema
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response from AI");
+
+    const parsed = JSON.parse(text);
+    return mapResponseToServices(parsed.services);
+  } catch (error) {
+    console.error("Repo Generation failed:", error);
+    throw error;
+  }
+};
+
 export const parseAndMigrateYaml = async (yamlInput: string): Promise<DockerService[]> => {
   try {
     const response = await ai.models.generateContent({
@@ -163,64 +272,7 @@ export const parseAndMigrateYaml = async (yamlInput: string): Promise<DockerServ
       `,
       config: {
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            services: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING, description: "Service key name" },
-                  image: { type: Type.STRING },
-                  command: { type: Type.STRING },
-                  restart: { type: Type.STRING },
-                  ports: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        host: { type: Type.STRING },
-                        container: { type: Type.STRING },
-                        protocol: { type: Type.STRING }
-                      }
-                    }
-                  },
-                  environment: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        key: { type: Type.STRING },
-                        value: { type: Type.STRING }
-                      }
-                    }
-                  },
-                  volumes: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        source: { type: Type.STRING },
-                        target: { type: Type.STRING }
-                      }
-                    }
-                  },
-                  networks: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                  },
-                  dependsOn: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                  },
-                  mem_limit: { type: Type.STRING }
-                },
-                required: ["name", "image"]
-              }
-            }
-          }
-        }
+        responseSchema: fullStackSchema
       }
     });
 
@@ -228,35 +280,7 @@ export const parseAndMigrateYaml = async (yamlInput: string): Promise<DockerServ
     if (!text) throw new Error("No response from AI");
     
     const parsed = JSON.parse(text);
-    
-    // Map to internal DockerService type with IDs
-    return parsed.services.map((s: any) => ({
-      id: generateId(),
-      name: s.name,
-      image: s.image,
-      command: s.command,
-      restart: s.restart,
-      ports: (s.ports || []).map((p: any) => ({
-        id: generateId(),
-        host: String(p.host),
-        container: String(p.container),
-        protocol: p.protocol || 'tcp'
-      })),
-      environment: (s.environment || []).map((e: any) => ({
-        id: generateId(),
-        key: e.key,
-        value: String(e.value)
-      })),
-      volumes: (s.volumes || []).map((v: any) => ({
-        id: generateId(),
-        source: v.source,
-        target: v.target
-      })),
-      networks: s.networks || [],
-      dependsOn: s.dependsOn || [],
-      mem_limit: s.mem_limit
-    }));
-
+    return mapResponseToServices(parsed.services);
   } catch (error) {
     console.error("Migration failed:", error);
     throw error;
